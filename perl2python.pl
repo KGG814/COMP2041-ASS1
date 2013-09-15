@@ -1,11 +1,8 @@
 #!/usr/bin/perl
-
-# written by andrewt@cse.unsw.edu.au September 2013
-# as a starting point for COMP2041/9041 assignment 
-# http://cgi.cse.unsw.edu.au/~cs2041/13s2/assignments/perl2python
+use warnings;
 
 while ($line = <>) {
-	if ($line =~ /^#!/ && $. == 1) {
+	if ($line =~ m/^#!/ and $. == 1) {
 	
 		# translate #! line 
 		
@@ -13,17 +10,21 @@ while ($line = <>) {
 	} elsif ($line =~ /^\s*#/ || $line =~ /^\s*$/) {
 	
 		# Blank & comment lines can be passed unchanged
-		
 		print $line;
-	} elsif ($line =~ /^\s*print\s*"(.*)\\n"[\s;]*$/) {
+	} else {
+		# Strip commas
+		if ($line =~ m/^(.*);/) {
+			$line = $1;
+		}
 		# Python's print adds a new-line character by default
 		# so we need to delete it from the Perl print statement
-		
-		print "print \"$1\"\n";
-	} else {
-	
-		# Lines we can't translate are turned into comments
-		
-		print "#$line\n";
+		if ($line =~ m/^\s*print\s*"(.*)\\n"[\s]*$/) {	
+			$line = "print '$1'";
+			while ($line =~ /'.*\$[a-zA-Z0-9]+.*'[\s]*/) {	
+				$line =~ s/(\$[a-zA-Z0-9]+)/\%s/ or die;	
+				$line = "$line, $1";
+			}
+		}
+		print "$line\n";
 	}
 }
