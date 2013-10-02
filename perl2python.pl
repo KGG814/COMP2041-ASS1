@@ -1,5 +1,4 @@
 #!/usr/bin/perl
-use warnings;
 use strict;
 our @lines = ();
 our $keepLine = 1;
@@ -7,13 +6,17 @@ while (my $line = <>) {
 	$keepLine = 1;
 	chomp $line;
 	$line = &pythonInitialise($line);
+	$line = &removeSemicolons($line);
 	$line = &ifHandler($line);
 	$line = &whileHandler($line);
+	$line = &perlFor($line);
+	$line = &cFor($line);	
 	$line = &removeCurly($line);
-	$line = &removeSemicolons($line);
+	$line = &nextLast($line);
+	$line = &equality($line);
 	$line = &removeNewlinePrint($line);
 	$line = &printSimple($line);
-	#$line = &interpolate($line);
+	$line = &interpolate($line);
 	$line = &convertVars($line);
 	
 	push @lines, $line if $keepLine;	
@@ -30,7 +33,7 @@ sub pythonInitialise {
 
 # Strip semicolons
 sub removeSemicolons {
-	if ($_[0] =~ m/^(.*);/) {
+	if ($_[0] =~ m/^(.*);$/) {
 			return $1;
 	}
 	return $_[0];
@@ -108,15 +111,47 @@ sub removeCurly {
 }
 
 # Convert variables to python by removing $
-#TODO only remove if there are an even number of single quotes on either side and not escaped
+#TODO only remove if there are an even number of single/double quotes on either side and not escaped
 sub convertVars {
 	$_[0] =~ s/\$//g;
 	return $_[0];
 }
 
+# Converts next and last to continue and break
+sub nextLast {
+	if ($_[0] =~ /^\s*next$/) {
+		$_[0] =~ s/next/continue/;
+	} elsif ($_[0] =~ /^\s*last$/) {
+		$_[0] =~ s/last/break/;
+	}
+	return $_[0];
+}
 
-#TODO Add break and continue
-#TODO Check bitwise works the same in python
+# Converts perl string equality operator to python equality operator
+# TODO type-checking eg. numerical equality
+sub equality {
+	if ($_[0] =~ / eq /) {
+		$_[0] =~ s/ eq / == /;
+	}
+	return $_[0];
+}
+
+# Handles perl style for loops
+sub perlFor {
+	if ($_[0] =~ /for \S* \(\S*\)/) {
+		$_[0] =~ s/for (\S*) \((\S*)\) /for \1 in \2/;
+	}
+	return $_[0];
+}
+
+# Handles C style for loops
+sub cFor {
+	if ($_[0] =~ /(\s*)for \(\$(\S+) = (\d+); \$\S+ < (\d+); \$\S+ [\+-]= (\d+)\)/) {
+		$_[0] = "$1for $2 in range($3, $4, $5):";
+	}
+	return $_[0];
+}
+
 #TODO For statements
 #TODO Handle ++ and --
 sub testPrint {
