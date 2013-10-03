@@ -14,6 +14,7 @@ while (my $line = <>) {
 	$line = &removeCurly($line);
 	$line = &nextLast($line);
 	$line = &equality($line);
+	$line = &joinHandler($line);
 	$line = &removeNewlinePrint($line);
 	$line = &printSimple($line);
 	$line = &interpolate($line);
@@ -83,7 +84,6 @@ sub ifHandler {
 		# Remove brackets
 		$_[0] =~ s/[()]//g;
 	}
-	
 	return $_[0]
 }
 
@@ -97,7 +97,6 @@ sub whileHandler {
 		# Remove brackets
 		$_[0] =~ s/[()]//g;
 	}
-	
 	return $_[0]
 }
 
@@ -152,8 +151,34 @@ sub cFor {
 	return $_[0];
 }
 
-#TODO For statements
-#TODO Handle ++ and --
+# Handles increment/decrement
+sub incDec {
+	$_[0] =~ s/++/+=1/;
+	$_[0] =~ s/--/-=1/;
+	return $_[0];
+}
+
+# Handles join
+sub joinHandler {
+	if ($_[0] =~ /join\(.+, .+\)/ {
+		$_[0] =~ s/join\((.+), (.+)\)/\1\.join\(\2\)/;
+	}
+}
+
+#TODO Check if _ is a valid variable name in python
+sub splitHandler {
+	if ($_[0] =~ /split\(.+, .+, .+\)/ {
+		$_[0] =~ s/split\((.+), (.+), (.+)\)/re\.split\(\1, \2, \3\)/;
+	} elsif ($_[0] =~ /split\(.+, .+\)/ {
+		$_[0] =~ s/split\((.+), (.+)\)/re\.split\(\1, \2\)/;
+	} elsif ($_[0] =~ /split\(.+\)/ {
+		$_[0] =~ s/split\((.+), (.+)\)/re\.split\(\1, \_\)/;
+	}
+}
+#TODO Perl style backwards if statements
+#TODO Chomp
+#TODO arguments
+
 sub testPrint {
 	print "----------------\n\n";
 	print "$_[0]\n";
