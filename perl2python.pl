@@ -7,14 +7,21 @@ while (my $line = <>) {
 	chomp $line;
 	$line = &pythonInitialise($line);
 	$line = &removeSemicolons($line);
+	$line = &chompHandler($line);
 	$line = &ifHandler($line);
+	$line = &keysIterate($line);
 	$line = &whileHandler($line);
 	$line = &perlFor($line);
 	$line = &cFor($line);	
 	$line = &removeCurly($line);
 	$line = &nextLast($line);
+	$line = &incDec($line);
 	$line = &equality($line);
 	$line = &joinHandler($line);
+	$line = &splitHandler($line);
+	$line = &pushHandler($line);
+	$line = &spliceHandler($line);
+	$line = &scalarArrayHandler($line);
 	$line = &removeNewlinePrint($line);
 	$line = &printSimple($line);
 	$line = &interpolate($line);
@@ -153,30 +160,72 @@ sub cFor {
 
 # Handles increment/decrement
 sub incDec {
-	$_[0] =~ s/++/+=1/;
+	$_[0] =~ s/\+\+/\+=1/;
 	$_[0] =~ s/--/-=1/;
 	return $_[0];
 }
 
 # Handles join
 sub joinHandler {
-	if ($_[0] =~ /join\(.+, .+\)/ {
+	if ($_[0] =~ /join\(.+, .+\)/) {
 		$_[0] =~ s/join\((.+), (.+)\)/\1\.join\(\2\)/;
 	}
+	return $_[0];
 }
 
 #TODO Check if _ is a valid variable name in python
 sub splitHandler {
-	if ($_[0] =~ /split\(.+, .+, .+\)/ {
+	if ($_[0] =~ /split\(.+, .+, .+\)/) {
 		$_[0] =~ s/split\((.+), (.+), (.+)\)/re\.split\(\1, \2, \3\)/;
-	} elsif ($_[0] =~ /split\(.+, .+\)/ {
+	} elsif ($_[0] =~ /split\(.+, .+\)/) {
 		$_[0] =~ s/split\((.+), (.+)\)/re\.split\(\1, \2\)/;
-	} elsif ($_[0] =~ /split\(.+\)/ {
+	} elsif ($_[0] =~ /split\(.+\)/) {
 		$_[0] =~ s/split\((.+), (.+)\)/re\.split\(\1, \_\)/;
 	}
+	return $_[0];
 }
+
+# Converts chomp
+sub chompHandler {
+	if ($_[0] =~ /chomp \$\S*/) {
+		$_[0] =~ s/chomp \$(\S*)/\1 = \1\.rstrip\(\'\\n\'\)/;
+	}
+	return $_[0];
+}
+
+# Converts push
+sub pushHandler {
+	if ($_[0] =~ /push @\S+, \S+/) {
+		$_[0] =~ s/push @(\S+), (.+)/\1\.append(\2)/;
+	}
+	return $_[0];
+}
+
+# Converts splice
+sub spliceHandler {
+	if ($_[0] =~ /scalar \(splice \(@\S+, .+, 1\)\)/) {
+		$_[0] =~ s/scalar \(splice \(@(\S+), (.+), 1\)\)/\1\.pop\(\2\)/;
+	}
+	return $_[0];
+}
+
+# Scalar array handler
+sub scalarArrayHandler {
+	if ($_[0] =~ /scalar @\S+/) {
+		$_[0] =~ s/scalar @(\S+)/len\(\1\)/;
+	}
+	return $_[0];
+}
+# keysIterate
+sub keysIterate {
+	if ($_[0] =~ /for \$name \(keys %\S+\)/) {
+		$_[0] =~ s/for \$(\S*) \(keys %(\S+) {\)/for \1 in \2\.keys\(\):/;
+	}
+	return $_[0];
+}
+
+#TODO Handle arguments (look at challenge)
 #TODO Perl style backwards if statements
-#TODO Chomp
 #TODO arguments
 
 sub testPrint {
