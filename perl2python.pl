@@ -1,17 +1,22 @@
 #!/usr/bin/perl
 use strict;
 our @lines = ();
+our %imports = ();
 our $keepLine = 1;
 while (my $line = <>) {
 	$keepLine = 1;
 	chomp $line;
 	$line = &pythonInitialise($line);
 	$line = &removeSemicolons($line);
+	$line = &substitutionHandler($line);
+	$line = &unixFilterHandler($line);
 	$line = &chompHandler($line);
 	$line = &ifHandler($line);
 	$line = &keysIterate($line);
+	$line = &stdinLoopHandler($line);
 	$line = &whileHandler($line);
 	$line = &perlFor($line);
+	$line = &listLengthArray($line);
 	$line = &cFor($line);	
 	$line = &removeCurly($line);
 	$line = &nextLast($line);
@@ -21,20 +26,26 @@ while (my $line = <>) {
 	$line = &splitHandler($line);
 	$line = &pushHandler($line);
 	$line = &spliceHandler($line);
+	$line = &stdinHandler($line);
 	$line = &scalarArrayHandler($line);
 	$line = &removeNewlinePrint($line);
 	$line = &printSimple($line);
+	$line = &argvArrayHandler($line);
 	$line = &interpolate($line);
 	$line = &convertVars($line);
 	
 	push @lines, $line if $keepLine;	
 }
 
+print "#!/usr/bin/python2.7 -u\n";
+print "import " if keys %imports;
+print join(",",keys %imports), "\n";
 print "$_\n" for @lines;
+
 # Set first line to use python compiler
 sub pythonInitialise {
 	if ($_[0] =~ m/^#!/ and $. == 1) {		
-		return "#!/usr/bin/python2.7 -u";		
+		$keepLine = 0;		
 	}
 	return $_[0];
 }
@@ -53,7 +64,6 @@ sub removeNewlinePrint {
 	if ($_[0] =~ m/(\s*print)\s*\"([^\"]*)\\n\"[\s]*$/) {	
 		return "$1 '$2'";
 	} elsif ($_[0] =~ /(\s*print.*), "\\n"\s*$/) {
-		testPrint($1);
 		return $1;
 	}
 	return $_[0];
@@ -62,11 +72,11 @@ sub removeNewlinePrint {
 # print variables without interpolating
 sub printSimple {
 	# Match for print containing only variables
-	if ($_[0] =~ /^print \'(\$[^\'\s\$]+[\s\']*)+\'/) {
+	if ($_[0] =~ /print \'(\$\w+(\[.*\])?[\s\']*)+\'/) {
 		# Match the variables
 		$_[0] =~ /^(\s*print) \'(.*)\'/;
 		# Split on $, grep for non-empty lines
-		my @varList = grep{/\S/} split(/\$/, $2);
+		my @varList = grep{/\S/} split(/[^\[]\$/, $2);
 		my $vars = join(",", @varList);
 		$_[0] = "$1 $vars";
 	}
@@ -142,10 +152,14 @@ sub equality {
 	return $_[0];
 }
 
-# Handles perl style for loops
+# Handles perl style for/foreach loops
 sub perlFor {
-	if ($_[0] =~ /for \S* \(\S*\)/) {
-		$_[0] =~ s/for (\S*) \((\S*)\) /for \1 in \2/;
+	if ($_[0] =~ /for \S* \(\S*\)\s*{/) {
+		$_[0] =~ s/for (\S*) \((\S*)\)\s*{/for \1 in \2:/;
+		$_[0] =~ s/(\d)\.\.(\d)/xrange\(\1, \2\+1\)/
+	} elsif ($_[0] =~ /foreach \S* \(\S*\)\s*{/) {
+		$_[0] =~ s/foreach (\S*) \((\S*)\)\s*{/for \1 in \2:/;
+		$_[0] =~ s/(\d)\.\.(\d)/xrange\(\1, \2\+1\)/
 	}
 	return $_[0];
 }
@@ -176,10 +190,13 @@ sub joinHandler {
 #TODO Check if _ is a valid variable name in python
 sub splitHandler {
 	if ($_[0] =~ /split\(.+, .+, .+\)/) {
+		$imports{"re"}++;
 		$_[0] =~ s/split\((.+), (.+), (.+)\)/re\.split\(\1, \2, \3\)/;
 	} elsif ($_[0] =~ /split\(.+, .+\)/) {
+		$imports{"re"}++;
 		$_[0] =~ s/split\((.+), (.+)\)/re\.split\(\1, \2\)/;
 	} elsif ($_[0] =~ /split\(.+\)/) {
+		$imports{"re"}++;
 		$_[0] =~ s/split\((.+), (.+)\)/re\.split\(\1, \_\)/;
 	}
 	return $_[0];
@@ -210,13 +227,15 @@ sub spliceHandler {
 }
 
 # Scalar array handler
+# For finding length of arrays
 sub scalarArrayHandler {
 	if ($_[0] =~ /scalar @\S+/) {
 		$_[0] =~ s/scalar @(\S+)/len\(\1\)/;
 	}
 	return $_[0];
 }
-# keysIterate
+
+# Handles program pattern for iterating through keys
 sub keysIterate {
 	if ($_[0] =~ /for \$name \(keys %\S+\)/) {
 		$_[0] =~ s/for \$(\S*) \(keys %(\S+) {\)/for \1 in \2\.keys\(\):/;
@@ -224,9 +243,72 @@ sub keysIterate {
 	return $_[0];
 }
 
-#TODO Handle arguments (look at challenge)
+# Handle loop use of STDIN
+sub stdinLoopHandler {
+	if ($_[0] =~ /while \(\$\w+ = <STDIN>\) {/) {
+		$imports{"sys"}++;
+		$_[0] =~ s/while \(\$(\w+) = <STDIN>\) {/for \1 in sys\.stdin:/
+	}
+	return $_[0];
+}
+
+# Handle basic use of STDIN
+sub stdinHandler {
+	if ($_[0] =~ /<STDIN>/) {
+		$imports{"sys"}++;
+		$_[0] =~ s/<STDIN>/sys.stdin.readline()/
+	}
+	return $_[0];
+}
+
+# Handle use of ARGV as array
+sub argvArrayHandler {
+	if ($_[0] =~ /\@ARGV/) {
+		$_[0] =~ s/\@ARGV/sys.argv[1:]/;
+		$imports{"sys"}++;
+	}
+	return $_[0];
+}
+
+# Handle use of ARGV elements
+sub argvArrayHandler {
+	if ($_[0] =~ /\$ARGV\[\$\w+\]/) {
+		$_[0] =~ s/\$ARGV\[\$(\w+)\]/sys.argv[\1+1]/;
+		$imports{"sys"}++;
+	}
+	return $_[0];
+}
+
+# Handles unix filter behaviour (<>)
+sub unixFilterHandler {
+	if ($_[0] =~ /while \(\$\S+ = <>\)/) {
+		$_[0] =~ s/while \(\$(\S+) = <>\) {/for \1 in fileinput\.input\(\):/;
+		$imports{"fileinput"}++;
+	}
+	return $_[0];
+}
+
+# Handles regexp substitution
+sub substitutionHandler {
+	if ($_[0] =~ /\$\S+ =~ s\/\S*\/\S*\/g/) {
+		$_[0] =~ s/\$(\S+) =~ s\/(\S*)\/(\S*)\/g/\1 = re\.sub\(r'\2', '\3', \1\)/;
+	}
+	return $_[0];
+}
+
+# Handles perl .. notation
+sub listLengthArray {
+	if ($_[0] =~ /0\.\.\$#ARGV/) {
+		$_[0] =~ s/0\.\.\$#ARGV/xrange\(len\(sys\.argv\) - 1\)/;
+	}
+	return $_[0];
+}
+
+
 #TODO Perl style backwards if statements
-#TODO arguments
+#TODO Handle numbers (floats ints, etc)
+#TODO Arrays, hashes
+#TODO shift, unshift, reverse
 
 sub testPrint {
 	print "----------------\n\n";
